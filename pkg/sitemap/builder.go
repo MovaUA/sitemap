@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
 
 	"github.com/movaua/link/pkg/link"
@@ -17,22 +18,26 @@ import (
 // and returns sitemap with links belonging to the same domain
 // as of the provided url, or an error if any.
 // Build uses default Builder.
-func Build(rootURL string, maxDepth int) (*URLSet, error) {
+func Build(rootURL string) (*URLSet, error) {
 	defaultBuilder := NewBuilder()
-	return defaultBuilder.Build(rootURL, maxDepth)
+	return defaultBuilder.Build(rootURL)
 }
 
 // Builder buils sitemap
 type Builder struct {
-	client *http.Client
-	filter FilterFunc
+	client             *http.Client
+	filter             FilterFunc
+	maxDepth           int
+	concurrentRequests int
 }
 
 // NewBuilder creates a builder
 func NewBuilder(opts ...OptionFunc) *Builder {
 	b := &Builder{
-		client: http.DefaultClient,
-		filter: defaultFilter,
+		client:             http.DefaultClient,
+		filter:             defaultFilter,
+		maxDepth:           3,
+		concurrentRequests: runtime.NumCPU(),
 	}
 	for _, opt := range opts {
 		opt(b)
@@ -43,7 +48,7 @@ func NewBuilder(opts ...OptionFunc) *Builder {
 // Build walks all the links on the site provided by url
 // and returns sitemap with links belonging to the same domain
 // as of the provided url, or an error if any
-func (b *Builder) Build(rootURL string, maxDepth int) (*URLSet, error) {
+func (b *Builder) Build(rootURL string) (*URLSet, error) {
 	root, err := url.Parse(rootURL)
 	if err != nil {
 		return nil, err
@@ -57,7 +62,7 @@ func (b *Builder) Build(rootURL string, maxDepth int) (*URLSet, error) {
 	var queue []string
 	next := []string{root.String()}
 
-	for depth := 0; depth < maxDepth; depth++ {
+	for depth := 0; depth < b.maxDepth; depth++ {
 		queue, next = next, []string{}
 		for _, rawurl := range queue {
 			base, foundURLs, err := b.findURLs(rawurl)

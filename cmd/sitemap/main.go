@@ -18,13 +18,12 @@ func main() {
 	timeout := flag.Int("timeout", 3, "timeout in seconds to wait for response from a single HTTP request")
 	flag.Parse()
 
-	client := &http.Client{
-		Timeout: time.Duration(*timeout) * time.Second,
-	}
+	builder := sitemap.NewBuilder(
+		sitemap.WithClient(&http.Client{Timeout: time.Duration(*timeout) * time.Second}),
+		sitemap.WithMaxDepth(*maxDepth),
+	)
 
-	builder := sitemap.NewBuilder(sitemap.WithClient(client))
-
-	urlset, err := builder.Build(*urlFlag, *maxDepth)
+	urlset, err := builder.Build(*urlFlag)
 	if err != nil {
 		log.Fatalln(err)
 	}

@@ -26,3 +26,18 @@ func WithFilter(filter FilterFunc) OptionFunc {
 // it returns url valid for sitemap and true
 // or nil and false otherwise.
 type FilterFunc func(base, u *url.URL) (*url.URL, bool)
+
+// WithMaxDepth configures max depth
+func WithMaxDepth(maxDepth int) OptionFunc {
+	return func(b *Builder) {
+		b.maxDepth = maxDepth
+	}
+}
+
+// WithConcurrentRequests configures how many concurrent requests
+// can be processed simultaneously
+func WithConcurrentRequests(concurrentRequests int) OptionFunc {
+	return func(b *Builder) {
+		b.concurrentRequests = concurrentRequests
+	}
+}
