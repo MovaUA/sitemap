@@ -3,3 +3,6 @@
 
 # Ignore built binary
 /sitemap
+
+# Result sitemap file
+/sitemap.xml

@@ -5,29 +5,36 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/movaua/sitemap/pkg/sitemap"
 )
 
 func main() {
-	url := flag.String("url", "", "[required] an URL to the site")
+	urlFlag := flag.String("url", "https://github.com/movaua/sitemap", "the URL of the site you want to build a sitemap for")
+	maxDepth := flag.Int("depth", 3, "a maximum depth of pages to traverse")
+	timeout := flag.Int("timeout", 3, "timeout in seconds to wait for response from a single HTTP request")
 	flag.Parse()
-	if *url == "" {
-		flag.Usage()
-		os.Exit(1)
+
+	client := &http.Client{
+		Timeout: time.Duration(*timeout) * time.Second,
 	}
 
-	urlset, err := sitemap.Build(*url)
+	builder := sitemap.NewBuilder(sitemap.WithClient(client))
+
+	urlset, err := builder.Build(*urlFlag, *maxDepth)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	out, err := xml.MarshalIndent(urlset, "", "  ")
+	enc := xml.NewEncoder(os.Stdout)
+	enc.Indent("", "  ")
 
-	if err != nil {
+	fmt.Print(xml.Header)
+	if err = enc.Encode(urlset); err != nil {
 		log.Fatalln(err)
 	}
-
-	fmt.Printf("%s%s\n", xml.Header, out)
+	fmt.Println()
 }
