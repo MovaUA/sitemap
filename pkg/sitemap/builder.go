@@ -77,7 +77,7 @@ func (b *Builder) Build(rootURL string) (*URLSet, error) {
 					if err != nil {
 						log.Warnf("could not find URLs from %q: %v\n", rawurl, err)
 						results <- nil
-						return
+						continue
 					}
 
 					result := make([]string, 0, len(foundLinks))
