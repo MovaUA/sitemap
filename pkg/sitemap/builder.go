@@ -1,6 +1,3 @@
-// Package sitemap builds sitemap for the site.
-// Built sitemap is suitable for XML encoding in Sitemaps XML format.
-// See https://www.sitemaps.org/protocol.html
 package sitemap
 
 import (
