@@ -5,7 +5,6 @@ package sitemap
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"runtime"
@@ -13,15 +12,6 @@ import (
 
 	"github.com/movaua/link/pkg/link"
 )
-
-// Build walks all the links on the site provided by url
-// and returns sitemap with links belonging to the same domain
-// as of the provided url, or an error if any.
-// Build uses default Builder.
-func Build(rootURL string) (*URLSet, error) {
-	defaultBuilder := NewBuilder()
-	return defaultBuilder.Build(rootURL)
-}
 
 // Builder buils sitemap
 type Builder struct {
@@ -49,34 +39,70 @@ func NewBuilder(opts ...OptionFunc) *Builder {
 // and returns sitemap with links belonging to the same domain
 // as of the provided url, or an error if any
 func (b *Builder) Build(rootURL string) (*URLSet, error) {
-	root, err := url.Parse(rootURL)
+	res, err := b.client.Get(rootURL)
 	if err != nil {
 		return nil, err
 	}
-	if root.Scheme != "http" && root.Scheme != "https" {
-		return nil, fmt.Errorf("rootURL schema is not supported: %s", root.Scheme)
+	if err := res.Body.Close(); err != nil {
+		return nil, err
+	}
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("%s", res.Status)
 	}
 
+	root := res.Request.URL
+
+	log.Debugf("concurrentRequests %d\n", b.concurrentRequests)
+
+	var entries []URLEntry
 	seen := make(map[string]struct{})
 
 	var queue []string
-	next := []string{root.String()}
+	next := []string{
+		root.String(),
+	}
 
 	for depth := 0; depth < b.maxDepth; depth++ {
-		queue, next = next, []string{}
-		for _, rawurl := range queue {
-			base, foundURLs, err := b.findURLs(rawurl)
-			if err != nil {
-				log.Printf("could not get URls from %q: %v\n", rawurl, err)
-				continue
-			}
-			for _, found := range foundURLs {
-				filtered, ok := b.filter(base, found)
-				if !ok {
-					continue
-				}
+		queue, next = next, nil
 
-				rawurl := filtered.String()
+		log.Debugf("depth %d out of %d, queue length %d\n", depth+1, b.maxDepth, len(queue))
+
+		jobs := make(chan string, b.concurrentRequests)
+		results := make(chan []string, b.concurrentRequests)
+
+		for i := 0; i < b.concurrentRequests; i++ {
+			go func(jobs <-chan string, results chan<- []string) {
+				for rawurl := range jobs {
+					request, foundLinks, err := b.findLinks(rawurl)
+					if err != nil {
+						log.Warnf("could not find URLs from %q: %v\n", rawurl, err)
+						results <- nil
+						return
+					}
+
+					result := make([]string, 0, len(foundLinks))
+					for _, found := range foundLinks {
+						filtered, ok := b.filter(root, request, found.Href)
+						if !ok {
+							continue
+						}
+						result = append(result, filtered.String())
+					}
+
+					results <- result
+				}
+			}(jobs, results)
+		}
+
+		go func() {
+			defer close(jobs)
+			for _, rawurl := range queue {
+				jobs <- rawurl
+			}
+		}()
+
+		for range queue {
+			for _, rawurl := range <-results {
 				if _, ok := seen[rawurl]; ok {
 					continue
 				}
@@ -84,51 +110,53 @@ func (b *Builder) Build(rootURL string) (*URLSet, error) {
 				next = append(next, rawurl)
 			}
 		}
+
 		if len(next) == 0 {
 			break
 		}
+
+		foundEntries := make([]URLEntry, 0, len(next))
+		for _, rawurl := range next {
+			foundEntries = append(foundEntries, URLEntry{URL: rawurl})
+		}
+		entries = append(entries, foundEntries...)
 	}
 
-	urlset := URLSet{Entries: make([]URLEntry, 0, len(seen))}
-	for rawurl := range seen {
-		urlset.Entries = append(urlset.Entries, URLEntry{URL: rawurl})
-	}
-	return &urlset, nil
+	return &URLSet{Entries: entries}, nil
 }
 
-func (b *Builder) findURLs(rawurl string) (*url.URL, []*url.URL, error) {
+func (b *Builder) findLinks(rawurl string) (*url.URL, []link.Link, error) {
 	res, err := b.client.Get(rawurl)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer res.Body.Close()
 
-	links, err := link.Find(res.Body)
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusBadRequest {
+		return res.Request.URL, nil, fmt.Errorf("%s", res.Status)
+	}
+
+	foundLinks, err := link.Find(res.Body)
 	if err != nil {
 		return res.Request.URL, nil, err
 	}
 
-	found := make([]*url.URL, 0, len(links))
-
-	for _, l := range links {
-		u, err := url.Parse(l.Href)
-		if err != nil {
-			log.Printf("could not parse URL %q: %v\n", l.Href, err)
-			continue
-		}
-		found = append(found, u)
-	}
-
-	return res.Request.URL, found, nil
+	return res.Request.URL, foundLinks, nil
 }
 
-func defaultFilter(base, u *url.URL) (*url.URL, bool) {
-	if strings.HasPrefix(u.String(), "#") {
+func defaultFilter(root, page *url.URL, pageLink string) (*url.URL, bool) {
+	parsed, err := url.Parse(pageLink)
+	if err != nil {
 		return nil, false
 	}
-	result := base.ResolveReference(u)
-	if ok := (result.Scheme == "http" || result.Scheme == "https") && result.Host == base.Host; !ok {
+	if strings.HasPrefix(pageLink, "#") {
 		return nil, false
 	}
-	return result, true
+
+	resolved := page.ResolveReference(parsed)
+	if ok := (resolved.Scheme == "http" || resolved.Scheme == "https") && resolved.Host == root.Host; !ok {
+		return nil, false
+	}
+
+	return resolved, true
 }

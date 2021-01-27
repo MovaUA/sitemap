@@ -25,7 +25,7 @@ func WithFilter(filter FilterFunc) OptionFunc {
 // FilterFunc filters u against its base,
 // it returns url valid for sitemap and true
 // or nil and false otherwise.
-type FilterFunc func(base, u *url.URL) (*url.URL, bool)
+type FilterFunc func(base, request *url.URL, foundLink string) (*url.URL, bool)
 
 // WithMaxDepth configures max depth
 func WithMaxDepth(maxDepth int) OptionFunc {
