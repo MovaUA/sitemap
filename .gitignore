@@ -1,18 +1,8 @@
-# Binaries for programs and plugins
-*.exe
-*.dll
-*.so
-*.dylib
+# IDE
+**/.vscode/
 
-# Test binary, build with 
-*.test
+# Ignore built binary
+/sitemap
 
-# Output of the go coverage tool, specifically when used with LiteIDE
-*.out
-
-# Project-local glide cache, RE: https://github.com/Masterminds/glide/issues/736
-.glide/
-
-# Ignore tmp files
-tmp/*
-
+# Result sitemap file
+/sitemap.xml
