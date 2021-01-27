@@ -136,8 +136,8 @@ func (b *Builder) findLinks(rawurl string) (*url.URL, []link.Link, error) {
 		return res.Request.URL, nil, fmt.Errorf("%s", res.Status)
 	}
 
-	if !strings.HasPrefix(res.Header.Get("Content-Type"), "text/html") {
-		return nil, nil, nil
+	if !isContentTypeTextHTML(res.Header) {
+		return res.Request.URL, nil, nil
 	}
 
 	foundLinks, err := link.Find(res.Body)
@@ -146,6 +146,15 @@ func (b *Builder) findLinks(rawurl string) (*url.URL, []link.Link, error) {
 	}
 
 	return res.Request.URL, foundLinks, nil
+}
+
+func isContentTypeTextHTML(h http.Header) bool {
+	for _, v := range h.Values("Content-Type") {
+		if strings.EqualFold(v, "text/html") {
+			return true
+		}
+	}
+	return false
 }
 
 func defaultFilter(root, page *url.URL, pageLink string) (*url.URL, bool) {
