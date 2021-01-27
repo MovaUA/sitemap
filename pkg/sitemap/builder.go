@@ -136,6 +136,10 @@ func (b *Builder) findLinks(rawurl string) (*url.URL, []link.Link, error) {
 		return res.Request.URL, nil, fmt.Errorf("%s", res.Status)
 	}
 
+	if !strings.HasPrefix(res.Header.Get("Content-Type"), "text/html") {
+		return nil, nil, nil
+	}
+
 	foundLinks, err := link.Find(res.Body)
 	if err != nil {
 		return res.Request.URL, nil, err
